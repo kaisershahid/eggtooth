@@ -1,0 +1,15 @@
+#!/usr/bin/ruby
+require_relative '../lib/eggtooth.rb'
+require_relative '../lib/eggtooth/cli.rb'
+
+# @todo hook into local build settings for extended actions
+if ARGV.length == 0
+	puts Eggtooth::CLI.usage().join("\n")
+elsif ARGV[0] == '-h' && ARGV[1]
+	puts Eggtooth::CLI.usage(ARGV[1]).join("\n")
+else
+	commands = Eggtooth::CLI.parse(ARGV)
+	puts commands.inspect
+end
+
+Eggtooth::Framework.new
