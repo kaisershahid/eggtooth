@@ -23,14 +23,13 @@ class Eggtooth::ResourceManager
 	
 	def initialize()
 		@handlers = []
-		@exec_paths = ['/lib', '/ext']
 		@root_paths = ['/ext', '/lib']
 		@overlay_prefix = PATH_MERGE
 		@handler_lib = nil
 	end
-	
+
 	# @todo take out is_exec support
-	def resolve(path, is_exec = false)
+	def resolve(path)
 		res = nil
 		
 		do_merge = false
@@ -67,32 +66,85 @@ class Eggtooth::ResourceManager
 				end
 			end
 		end
-		
-		if is_exec && res
-			can_exec = false
-			@exec_paths.each do |prefix|
-				if res.path.start_with?(prefix)
-					can_exec = true
-					break
-				end
-			end
-			return nil if !can_exec
-		end
-		
+
 		res
 	end
-	
-	# Resolves the path against the approved executable roots.
-	def resolve_exec(path)
-		return resolve(path, true)
+
+	# Given a request path (like `/path/to/something.selector.selector.ext/suffix`), finds the 
+	# best matching resource and creates a {{PathInfo}} object from it.
+	def path_info(path, method = nil)
+		parts = path[1..-1].split('/')
+		pathnew = ''
+		last_res = resolve('/')
+
+		selectors = []
+		ext = nil
+		
+		idx = 0
+		parts.each do |part|
+			idx += 1
+			subparts = part.split('.')
+
+			name_matches = {}
+			name = subparts.shift
+			nametmp = name
+			name_matches[name] = false
+			subparts.each do |selector|
+				nametmp += ".#{selector}"
+				name_matches[nametmp] = false
+			end
+
+			candidates = last_res.children do |child|
+				if name_matches.has_key?(child.name)
+					name_matches[child.name] = child
+					true
+				else
+					false
+				end
+			end
+
+			if candidates.length > 0
+				if name_matches[part]
+					# longest possible match, so continue on to check next level
+					last_res = name_matches[part]
+				else
+					# not longest possible match, so find longest among candidates
+					if candidates.length > 1
+						child = nil
+						candidates.each do |candi|
+							if child == nil
+								child = candi
+							elsif candi.name.length > child.name.length
+								child = candi
+							end
+						end
+						last_res = child
+					else
+						last_res = candidates[0]
+					end
+					selectors = part[last_res.name.length+1..-1].split('.')
+					ext = selectors.pop
+					break
+				end
+			else
+				break
+			end
+		end
+
+		# remaining parts considered as suffix
+		suffix = parts[idx..-1].join('/')
+		if suffix != ''
+			suffix = "/#{suffix}"
+		end
+		
+		return Eggtooth::PathInfo.new({:path => last_res.path, :selectors => selectors, :extension => ext, :suffix => suffix, :method => method, :resource => last_res})
 	end
-	
+
 	def svc_activate(svc_man, attribs = {})
 		@svc_man = svc_man
 		@svc_man.add_event_listener(self, Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED)
 		@fwk = @svc_man.get_by_sid(:framework)
 
-		@exec_paths = Eggtooth::get_value(attribs['exec.paths'], Array)
 		@root_paths = Eggtooth::get_value(attribs['root.paths'], Array)
 
 		# initialize static mapping handlers

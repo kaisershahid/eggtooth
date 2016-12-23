@@ -13,7 +13,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 			@properties = properties.clone.freeze
 			@props_o = properties
 			@filepath = filepath
-			
+
 			if is_meta
 				@is_meta = true
 				@type = properties[ERM::PROP_RESOURCE_TYPE]
@@ -103,7 +103,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 
 			# strip prefix for effective path
 			epath = path == '/' ? '' : path[@prefixlen..-1]
-			epath = "#{@root}/#{epath}"
+			epath = "#{@root}#{epath}"
 			# check if yaml exists, otherwise assume normal file if exists
 			_metaname = "#{epath}#{META_FILE}"
 			if File.exists?(_metaname)
@@ -121,7 +121,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 			if File.directory?(root)
 				len = @root.length
 				pathroot = root[len..-1]
-				#pathroot = '/' if pathroot == ''
+				pathroot = '' if pathroot == '/'
 				last_res = nil
 
 				Dir.new(root).each do |entry|
@@ -140,7 +140,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 					end
 
 					path = "#{pathroot}/#{name}"
-					res = Resource.new(self, path, props, "#{pathroot}/#{entry}", is_meta)
+					res = Resource.new(self, path, props, "#{epath}", is_meta)
 					add = block != nil ? block.call(res) : true
 					if add
 						children << res
