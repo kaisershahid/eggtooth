@@ -16,12 +16,12 @@ class Eggtooth::Framework
 		@opts = opts
 		@opts[:config] = {} if !opts[:config]
 		@opts[:config]['dir.config'] = 'config' if !@opts[:config]['dir.config']
+		@opts[:runmode] = 'local' if !@opts[:runmode]
 
 		root = opts[:root]
 		root = ENV['EGGTOOTH_HOME'] if !root
 		root = Dir.pwd if !root || root == ''
-		@root = root[0] == '/' ? root : File.realdirpath(File.dirname(root))
-		$stderr.write "> eggtooth root: #{@root}\n"
+		@root = root[0] == '/' ? root : Eggtooth.resolve_path(root, Dir.pwd)
 		
 		@ee = Eggshell::Processor.new
 		@ee.vars[E_PATH_HOME] = root
@@ -30,7 +30,9 @@ class Eggtooth::Framework
 		@cfg_help = Eggtooth::ConfigHelper.new(@opts[:config])
 		@cfg_help[E_PATH_INSTALL] = Eggtooth::PATH_INSTALL
 		load_cfg('base')
-		load_cfg(@opts[:env]) if @opts[:env]
+		@opts[:runmode].split(',').each do |runmode|
+			load_cfg(runmode)
+		end
 
 		# normalize directories and set expression vars
 		['libs','content','var','output'].each do |pathkey|
@@ -47,6 +49,8 @@ class Eggtooth::Framework
 		
 		@svc_man = Eggtooth::ServiceManager.new
 		@svc_man.add(self, {:sid => :framework})
+		
+		$stderr.write "<< framework: #{@id} => #{@root} >>\n"
 	end
 
 	private_class_method :new
@@ -58,10 +62,6 @@ class Eggtooth::Framework
 	end
 	protected :load_cfg
 	
-	def service_manager
-		@svc_man
-	end
-
 	# Initializes rest of framework and loads extensions. This can only be called once.
 	def startup
 		return if @started
@@ -69,6 +69,16 @@ class Eggtooth::Framework
 		
 		@res_man = Eggtooth::ResourceManager.new()
 		@svc_man.add(@res_man, @cfg_help['resolver.manager'])
+
+		@dispatcher = Eggtooth::Dispatcher.new
+		@action_man = Eggtooth::ActionManager.new
+		@script_act = Eggtooth::ActionManager::ScriptAction.new(self, @cfg_help['script.action'])
+
+		@svc_man.add(@dispatcher, {:sid => 'dispatcher'})
+		@svc_man.add(@action_man, {:sid => 'action.manager'})
+		@svc_man.add(@script_act, {:sid => 'action.impl.script'})
+
+		# @todo initialize services
 	end
 	
 	def shutdown
@@ -84,6 +94,14 @@ class Eggtooth::Framework
 	
 	def service_manager
 		@svc_man
+	end
+	
+	def dispatcher
+		@dispatcher
+	end
+	
+	def action_manager
+		@action_manager
 	end
 	
 	# Uses expression evaluator to expand interpolated vars and expressions

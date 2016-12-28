@@ -41,18 +41,31 @@ module Eggtooth
 		end
 		val
 	end
+
+	# Compares a scalar value to a scalar or array reference.	
+	def self.equal_mixed(needle, haystack)
+		if !haystack.is_a?(Array)
+			return needle == haystack
+		else
+			return haystack.find_index(needle) != nil
+		end
+	end
 end
 
 require 'eggshell'
+require 'rack'
 require 'json'
 require 'yaml'
 
-require_relative './eggtooth/path-info.rb'
-require_relative './eggtooth/service-manager.rb'
 require_relative './eggtooth/framework.rb'
+require_relative './eggtooth/service-manager.rb'
 require_relative './eggtooth/config-helper.rb'
-#require_relative './eggtooth/eggshell-bundle.rb'
 require_relative './eggtooth/resource-manager.rb'
-require_relative './eggtooth/view-manager.rb'
+
+require_relative './eggtooth/client.rb'
+require_relative './eggtooth/dispatcher.rb'
+require_relative './eggtooth/action-manager.rb'
+require_relative './eggtooth/action-manager/script-action.rb'
+
+#require_relative './eggtooth/eggshell-bundle.rb'
 #require_relative './eggtooth/filter-manager.rb'
-#require_relative './eggtooth/action-manager.rb'

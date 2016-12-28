@@ -7,6 +7,24 @@
 # One specific use case is for the resolver manager: instances of handlers
 # registered to the service manager will result in the resolver manager 
 # getting notified, allowing it to add the handler to its list.
+#
+# h2. Terminology
+#
+# A [/service/] is simply an object that has some functionality tied to it.
+# Services can be retrieved by a unique id, an interface that it conforms to,
+# or any other piece of information that it's initialized with.
+#
+# h2. Service Attributes
+#
+# A service has corresponding attributes that help with its visibility. The core
+# attributes are:
+#
+# - {{:sid}} (String): the service id. If `nil`, it's generated from the object's
+# class name plus timestamp.
+# - {{:service}} (String, Array): one or more interfaces exposed by the service. If `nil`, 
+# gets all included interfaces from object.
+# - {{:ranking}}: if there are multiple objects with the same {{:service}} interface, 
+# ranking provides an optional order.
 class Eggtooth::ServiceManager
 	KEY_SID = :sid
 	KEY_SERVICE = :service
@@ -33,6 +51,8 @@ class Eggtooth::ServiceManager
 				next if !svctype.index('::') || cls.is_a?(Class)
 				atts[:service] << svctype
 			end
+		elsif !atts[:service].is_a?(Array)
+			atts[:service] = [atts[:service]]
 		end
 		
 		@services[atts[:sid]] = [] if !@services[atts[:sid]]

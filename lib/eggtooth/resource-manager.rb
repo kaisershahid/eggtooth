@@ -2,6 +2,10 @@
 # by specific handlers -- the manager handles the delegation, and might do specific
 # high-level filtering before any handlers are called.
 #
+# Resources will often map to specific scripts and other files in Eggtooth, but
+# handlers can be used to map data to external data sources or even on-the-fly 
+# temporary data.
+#
 # @todo when adding new handlers, remove old handler if a prefix directly collides
 class Eggtooth::ResourceManager
 	include Eggtooth::ServiceManager::Events::EventListener
@@ -70,8 +74,7 @@ class Eggtooth::ResourceManager
 		res
 	end
 
-	# Given a request path (like `/path/to/something.selector.selector.ext/suffix`), finds the 
-	# best matching resource and creates a {{PathInfo}} object from it.
+	# Decomposes a path into its constituent parts. See {{PathInfo}} for more details.
 	def path_info(path, method = nil)
 		parts = path[1..-1].split('/')
 		pathnew = ''
@@ -137,9 +140,10 @@ class Eggtooth::ResourceManager
 			suffix = "/#{suffix}"
 		end
 		
-		return Eggtooth::PathInfo.new({:path => last_res.path, :selectors => selectors, :extension => ext, :suffix => suffix, :method => method, :resource => last_res})
+		return PathInfo.new({:path => last_res.path, :selectors => selectors, :extension => ext, :suffix => suffix, :resource => last_res, :method => method})
 	end
 
+	# Service activation via framework.
 	def svc_activate(svc_man, attribs = {})
 		@svc_man = svc_man
 		@svc_man.add_event_listener(self, Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED)
@@ -152,18 +156,19 @@ class Eggtooth::ResourceManager
 		mappings.each do |mapping|
 			prefix = mapping['prefix']
 			hroot = @fwk.expression_eval(mapping['path'])
-			handler = CoreFilesys::Handler.new(prefix, hroot)
+			handler = CoreFilesys::Handler.new(prefix, hroot, self)
 			add_handler(handler)
 		end
 	end
-	
+
+	# Service deactivation via framework.
 	def svc_deactivate(svc_man)
 		@handlers.clear
 		@fwk = nil
 		@svc_man.remove_event_listener(self)
 		@svc_man = nil
 	end
-	
+
 	def add_handler(handler, rank = -1)
 		# @todo insert by ranking?
 		@handlers << handler
@@ -171,7 +176,7 @@ class Eggtooth::ResourceManager
 			@handler_lib = handler
 		end
 	end
-	
+
 	def remove_handler(handler)
 		h = @handlers.delete(handler)
 		if h && h.prefix == PATH_LIB
@@ -192,7 +197,7 @@ class Eggtooth::ResourceManager
 		end
 	end
 
-	# Encapsulates the object from the resolved path.
+	# Encapsulates a piece of data.
 	module Resource
 
 		# The full path to the resource.
@@ -225,7 +230,8 @@ class Eggtooth::ResourceManager
 		# @return Resource `nil` if no child found.
 		def child(name)
 		end
-		
+	
+		# Returns the parent resource.
 		def parent
 		end
 		
@@ -238,6 +244,10 @@ class Eggtooth::ResourceManager
 		# @throw Exception if valid cast fails.
 		def cast(object)
 		end
+
+		# Returns the resource manager.
+		def manager
+		end
 	end
 	
 	# 
@@ -249,144 +259,82 @@ class Eggtooth::ResourceManager
 		# @return String The prefix handled by this instance.
 		def prefix
 		end
+
+		# Returns the resource manager.
+		def manager
+		end
 	end
 
-	# Takes 2 resources and merges properties/path structure, with `res1` being the override
-	# and `res2` being the overridden.
+	# {{PathInfo}} parses out the parts of a request path. In Eggtooth, the URL can be broken up
+	# as follows (similar in terminology to [~ Sling's model ; https://sling.apache.org/documentation/the-sling-engine/url-decomposition.html ~]):
 	#
-	# Property merging follows two rules:
+	# pre.
+	# /path/to/resource
+	# /path/to/resource.extension
+	# /path/to/resource.selector*.extension
+	# /path/to/resource.selector*.extension/suffix
 	# 
-	# # if `res1.`{{PROP_MERGE_HIDE_PROPS}} contains a set of keys, those properties are 
-	# ignored
-	# # `res1` overrides `res2`
+	# If we look at the resource name as being a set of words separated by a dot, we look for the 
+	# longest matching set of words from the URL to the resource itself. If there's one word left over,
+	# it's considered the [/extension/]. If there's two or more words left, the last word is the [/extension/],
+	# and the remaining words are the [/selectors/]. If there's a slash beyond the resource name, that is 
+	# considered the [/suffix/].
 	#
-	# Child merging follows a similar rule:
+	# These extra bits of the URL can potentially change the view of the resource you're requesting:
+	# for instance, if a resource can be rendered as either PDF or HTML, handlers can be written for 
+	# {{pdf}} and {{html}} extensions. If the resource is a search page, the selectors can contain
+	# offsets and limits (e.g. {{search.0.100.html}} or {{search.offset=0.limit=100.html}}). If the resource
+	# is a page editor, the suffix can be the path to an HTML file (e.g. {{/editor.html/path/to/actual/page.html}}).
 	#
-	# # if `res1.`{{PROP_MERGE_HIDE_CHILDREN}} contains a set of keys, those children are 
-	# ignored
-	# # `res1` overrides `res2`
-	# 
-	# Note that at a minimum, `res1` is expected to be non-null.
-	class MergedResource
-		include Resource
+	# Note that [/extension/] in this sense has nothing to do with underlying resource. For instance,
+	# if there's a resource named {{document.doc}}, there is no extension, but {{document.doc.pdf}} would have
+	# an extension of {{pdf}}.
+	class PathInfo
 		
-		def initialize(res1, res2, merge_prefix)
-			@res1 = res1
-			@res2 = res2
-			@props = {}
-			@_hprops = {}
-			@_hchildren = {}
-			
-			set_props(res1)
-			set_props(res2) if res2
+		def initialize(params)
+			@path = params[:path]
+			@extension = Eggtooth::get_value(params[:extension], '')
+			@selectors_raw = Eggtooth::get_value(params[:selectors], Array)
+			@selectors = @selectors_raw.join('.')
+			@suffix = Eggtooth::get_value(params[:suffix], '')
+			@method = Eggtooth::get_value(params[:method], '')
+			@resource = params[:resource]
+		end
 
-			@merge_prefix = merge_prefix
-			@path = @merge_prefix + res1.path[res1.path.index('/',1)..-1]
-			@name = File.basename(@path)
-		end
-		
-		def set_props(res)
-			(@props[PROP_MERGE_HIDE_PROPS] || []).each do |key|
-				@_hprops[key] = true
-			end
-			
-			(@props[PROP_MERGE_HIDE_CHILDREN] || []).each do |key|
-				@_hchildren[key] = true
-			end
-			
-			res.properties.each do |key,val|
-				if !@_hprops[key]
-					if !@props.has_key?(key)
-						@props[key] = val
-					end
-				end
-			end
-		end
-		
-		protected :set_props
-		
 		def path
-			@path
+			@path.clone
 		end
 		
-		def name
-			@name
-		end
-		
-		def type
-			@res1.type
-		end
-		
-		def parent
-			# @todo
-		end
-		
-		def children(&block)
-			c1 = []
-			c1map = {}
-			c2 = []
-			
-			if @res1
-				c1 = @res1.children(&block)
-				idx = 0
-				c1.each do |c|
-					c1map[c.name] = idx
-					idx += 1
-				end
-			end
-
-			# res2 is the overlayed resource, so now is time to hide chilren.
-			# for corresponding children, replace c1 entry with merged resource
-			if @res2
-				c2 = @res2.children do |res|
-					if @_hchildren.has_key?(res.name)
-						false
-					else
-						add = block != nil ? block.call(res) : true
-						if add
-							if c1map.has_key?(res.name)
-								idx = c1map[res.name]
-								c1[idx] = MergedResource.new(c1[idx], res, @merge_prefix)
-								false
-							else
-								true
-							end
-						end
-					end
-				end
-			end
-
-			children = c1 + c2
-			idx = 0
-			children.each do |child|
-				if !child.is_a?(MergedResource)
-					children[idx] = MergedResource.new(child, nil, @merge_prefix)
-				end
-				idx += 1
-			end
-			
-			children
-		end
-		
-		def child(name)
-			c1 = @res1.child(name)
-			c2 = @_hchildren[name] ? nil : @res2.child(name)
-			
-			# implication of c2 == nil: inheritance is broken or c1 is defining new branch. as such, no further merged resource
-			if c1
-				MergedResource.new(c1, c2, @merge_prefix)
-			else
-				MergedResource.new(c2, nil, @merge_prefix)
-			end
+		def selectors_raw
+			@selectors_raw.clone
 		end
 
-		def properties
-			@props.clone
+		def selectors
+			@selectors.clone
 		end
 
-		def cast(type)
+		def extension
+			@extension.clone
+		end
+
+		def suffix
+			@suffix.clone
+		end
+
+		def method
+			@method.clone
+		end
+		
+		def resource
+			@resource
+		end
+
+		# Apply changes to this instance's data and return a new instance.
+		# @todo fill in
+		def modify(mods = {})
 		end
 	end
 end
 
+require_relative './resource-manager/merged-resource.rb'
 require_relative './resource-manager/core-filesys.rb'

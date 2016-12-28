@@ -21,7 +21,13 @@ module Eggtooth::ResourceManager::CoreFilesys
 				@type = ERM::TYPE_NULL if !@type
 			else
 				@is_meta = false
-				@type = ERM::TYPE_FILE
+				@is_dir = false
+				if File.directory?(filepath)
+					@is_dir = true
+					@type = ERM::TYPE_FOLDER
+				else
+					@type = ERM::TYPE_FILE
+				end
 			end
 		end
 
@@ -38,8 +44,8 @@ module Eggtooth::ResourceManager::CoreFilesys
 		end
 		
 		def children(&block)
-			if @is_meta
-				children = @handler._children(@filepath, &block)
+			if @is_meta || @is_dir
+				children = @handler._children(@path, @filepath, &block)
 			else
 				[]
 			end
@@ -59,6 +65,10 @@ module Eggtooth::ResourceManager::CoreFilesys
 		
 		def properties
 			@properties
+		end
+		
+		def manager
+			@handler.manager
 		end
 		
 		def inspect
@@ -88,10 +98,15 @@ module Eggtooth::ResourceManager::CoreFilesys
 
 		# @param String prefix The virtual path that should be handled with this instance.
 		# @param String root The corresponding real path of the prefix.
-		def initialize(prefix, root)
+		def initialize(prefix, root, manager)
 			@prefix = prefix.clone
 			@prefixlen = prefix.length
-			@root = root
+			@root = "#{root}#{root.end_with?('/') ? '' : '/'}"
+			@manager = manager
+		end
+		
+		def manager
+			@manager
 		end
 		
 		def prefix
@@ -116,11 +131,9 @@ module Eggtooth::ResourceManager::CoreFilesys
 			return nil
 		end
 
-		def _children(root, &block)
+		def _children(pathroot, root, &block)
 			children = []
 			if File.directory?(root)
-				len = @root.length
-				pathroot = root[len..-1]
 				pathroot = '' if pathroot == '/'
 				last_res = nil
 
@@ -133,8 +146,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 					name = entry
 					epath = "#{root}/#{entry}"
 					_metaname = "#{epath}#{META_FILE}"
-					if File.directory?(epath)
-						next if !File.exists?(_metaname)
+					if File.exists?(_metaname)
 						is_meta = true
 						props = YAML.load(IO.read("#{epath}#{META_FILE}"))
 					end
@@ -157,11 +169,11 @@ module Eggtooth::ResourceManager::CoreFilesys
 			if File.exists?(cpath)
 				path = "#{path}#{path == '/' ? '' : '/'}#{name}"
 				_metaname = "#{cpath}#{META_FILE}"
-				if !File.directory?(cpath)
-					return Resource.new(self, path, {}, cpath)
-				elsif File.exists?(_metaname)
+				if File.exists?(_metaname)
 					props = YAML.load(IO.read(_metaname))
 					return Resource.new(self, path, props, cpath, true)
+				elsif File.exists?(cpath)
+					return Resource.new(self, path, {}, cpath)
 				end
 			end
 			nil
