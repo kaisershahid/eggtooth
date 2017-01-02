@@ -1,3 +1,9 @@
+require 'eggshell'
+require 'rack'
+require 'logging'
+require 'json'
+require 'yaml'
+
 # A Sling-like framework for Ruby. The root module itself just contains helper methods.
 # All the good stuff is deeper in.
 module Eggtooth
@@ -75,11 +81,6 @@ class Array
 		end
 	end
 end
-
-require 'eggshell'
-require 'rack'
-require 'json'
-require 'yaml'
 
 require_relative './eggtooth/framework.rb'
 require_relative './eggtooth/service-manager.rb'

@@ -1,8 +1,13 @@
 # Action manager returns the appropriate action for a request based on the
 # following parameters:
 #
-# - `path`: if there's an exact path match (excluding selectors and extension), 
-# the action handles it all. The path can be absolute or relative (e.g. 'partial/path');
+# # exact `path` match: only resource path is considered. If multiple matches
+# are found, the highest ranking and most recent action is used.
+# # partial `path` match: only resourcepath is considered. Any action registered
+# with a path ending in '/' and is an ancestor of `path` is used. Only one
+# handler can be assigned to a specific branch (e.g. one action for '/branch/' and 
+# '/branch/sub/' are valid, but not two for '/branch/'). [*NOTE*]: A valid regular
+# expression can also be used here by prefixing the path with {{!}} (e.g. '!/branch/.+/').
 # - `method` + (`type` || `selectors` || `extension` || `suffix`): `method` constrains
 # the relevant actions. From there, any action that matches one or more of the other
 # attributes is a contender for handling the request.
@@ -10,20 +15,28 @@
 # When matching other attributes, a basic rank is given to the action based on the
 # number of successful matches to each attribute. Implementations are free to choose
 # their own ranking system (with the knowledge that too much weighting can prevent
-# a better match from being used). See {@see Action.default_rank} for more of an
+# a better match from being used). See {Action.default_rank} for more of an
 # explanation on the basic strategy.
 #
 # Note that if a request's selectors are `a.b.c`, both `a.b` and `b.c` are equivalent
-# matches.
+# matches, and whichever is a higher rank or registered last is used.
 #
-# @todo support multiple same paths and use accept? ranking to find best
+# h2. Why?
+#
+# The algorithm to find an appropriate action assumes that specific or near-specific
+# path matches have context-sensitive handling, so the action is responsible for further
+# refinement of what action to finally take. For partial matches, given {{!/branch/.+/}}
+# and {{/branch/}}, the former takes precedence over the latter since its length implies
+# a better match (even if they're functionally equivalent).
+#
+# When using method, suffix, etc., it's assumed that a general behavior is desired.
 class Eggtooth::ActionManager
 	include Eggtooth::ServiceManager::Events::EventListener
 
 	METHOD_ALL = '*'
 
 	def initialize()
-		@handlers = {METHOD_ALL => []}
+		@handlers = {METHOD_ALL => [], :exact => {}, :partial => {}}
 	end
 
 	def svc_activate(svc_man, attribs = {})
@@ -58,10 +71,21 @@ class Eggtooth::ActionManager
 	def add_action(action)
 		if action.paths
 			action.paths.each do |path|
-				@handlers[path] = [] if !@handlers[path]
-				@handlers[path] << action
+				ptr = @handlers[:exact]
+				if path.end_with?('/')
+					ptr = @handlers[:partial]
+					if !path.start_with?('!')
+						path = Regexp.escape(path)
+					else
+						path = path[1..-1]
+					end
+				end
+				ptr[path] = [] if !ptr[path]
+				ptr[path] << action
 			end
-		else
+		end
+		
+		if action.methods
 			action.methods.each do |meth|
 				@handlers[meth] = [] if !@handlers[meth]
 				@handlers[meth] << action
@@ -72,11 +96,22 @@ class Eggtooth::ActionManager
 	def remove_action
 		if action.paths
 			action.paths.each do |path|
-				if @handlers[path]
-					@handlers[path].delete(action)
+				ptr = @handlers[:exact]
+				if path.end_with?('/')
+					ptr = @handlers[:partial]
+					if !path.start_with?('!')
+						path = Regexp.escape(path)
+					else
+						path = path[1..-1]
+					end
+				end
+				if ptr[path]
+					ptr[path].delete(action)
 				end
 			end
-		else
+		end
+		
+		if action.methods
 			action.methods.each do |meth|
 				if @handlers[meth]
 					@handlers[meth].delete(action)
@@ -85,27 +120,52 @@ class Eggtooth::ActionManager
 		end
 	end
 
-	# Maps a request to an action handler.
+	# Maps a request to an action handler. If 
 	def map(path_info)
-		if @handlers[path_info.path] && @handlers[path_info.path].length > 0 
-			return @handlers[path_info.path][-1]
-		else
-			meth = path_info.method
-			meth = METHOD_ALL if !@handlers[meth]
-			last_action = nil
-			last_rank = 0
+		path = path_info.path
+		action = nil
 
-			@handlers[meth].each do |action|
-				rank = action.accept?(path_info)
-				next if rank == 0
-				if rank >= last_rank
-					last_action = action
-					last_rank = rank
+		# priority 1: exact patch match
+		if @handlers[:exact][path] && @handlers[:exact][path].length > 0 
+			action = map_best(path_info, @handlers[:exact][path])
+			return action if action
+		end
+		
+		# priority 2: longest branch partial match
+		last_branch = nil
+		@handlers[:partial].each do |branch, branch_act|
+			if path.matches(branch)
+				if !last_branch || last_branch.length < branch.length
+					last_branch = branch
+					action = branch_act
 				end
 			end
-
-			return last_action
+			return action if action	
 		end
+		
+		# priority 3: 
+		meth = path_info.method
+		meth = METHOD_ALL if !@handlers[meth]
+		last_action = nil
+		last_rank = 0
+
+		action = map_best(path_info, @handlers[meth])
+
+		action
+	end
+	
+	def map_best(path_info, candidates)
+		last_action = nil
+		last_rank = 0
+		candidates.each do |action|
+			rank = action.accept?(path_info)
+			next if rank == 0
+			if rank >= last_rank
+				last_action = action
+				last_rank = rank
+			end
+		end
+		last_action
 	end
 
 	module Action

@@ -3,10 +3,12 @@ class Eggtooth::Dispatcher
 
 	def initialize
 		@filters = {}
+		@log = Logging.logger[self]
 	end
 	
 	def svc_activate(svc_man, attribs = {})
 		@svc_man = svc_man
+		@log = @svc_man.get_by_sid(:framework).logger(self)
 		svc_man.add_event_listener(self, [Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED, Eggtooth::ServiceManager::TOPIC_SERVICE_STOPPING])
 	end
 
@@ -68,6 +70,8 @@ class Eggtooth::Dispatcher
 			am = @svc_man.get_by_sid('action.manager')
 			handler = am.map(request.path_info)
 			request.context[:recurse] = {}
+			request.context['page_path_info'] = request.path_info
+			request.context['page_resource'] = request.path_info.resource
 
 			if !handler
 				# @todo ??
@@ -100,20 +104,20 @@ class Eggtooth::Dispatcher
 			raise Exception.new("infinite recursion detected for subrequest #{path}")
 		end
 
-#		puts ">> subrequest: #{request.path_info.inspect}"
+		log.debug ">> subrequest: #{request.path_info.inspect}"
 		exec_filters(Filter::SCOPE_INCLUDE, request, caller_response)
 		am = @svc_man.get_by_sid('action.manager')
 		handler = am.map(path_info)
 		
 		# @todo make a new request/response pair?
-#		puts "\t>> handler: #{handler}"
+		@log.debug ">> handler: #{handler}"
 		if !handler
 			# @todo ??
 		else
 			request.context.push
 			request.context['call_params'] = call_params
 			begin
-#				puts "pre-exec: #{request.path_info}"
+				@log.debug "pre-exec: #{request.path_info}"
 				handler.exec(request, caller_response)
 			rescue => ex
 				# @todo throw

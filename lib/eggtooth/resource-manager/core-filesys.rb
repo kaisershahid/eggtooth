@@ -16,9 +16,10 @@ module Eggtooth::ResourceManager::CoreFilesys
 
 			if is_meta
 				@is_meta = true
+				# set type; fallback is directory
 				@type = properties[ERM::PROP_RESOURCE_TYPE]
 				@type = properties[ERM::PROP_TYPE] if !@type
-				@type = ERM::TYPE_NULL if !@type
+				@type = ERM::TYPE_FOLDER if !@type
 			else
 				@is_meta = false
 				@is_dir = false
@@ -146,6 +147,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 					name = entry
 					epath = "#{root}/#{entry}"
 					_metaname = "#{epath}#{META_FILE}"
+					# @todo support static file with .meta?
 					if File.exists?(_metaname)
 						is_meta = true
 						props = YAML.load(IO.read("#{epath}#{META_FILE}"))

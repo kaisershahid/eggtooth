@@ -34,23 +34,32 @@ class Eggtooth::ServiceManager
 	TOPIC_SERVICE_UNREGISTERED = 'eggtooth/servicemanager/service/unregistered'
 	TOPIC_SERVICE_STOPPING = 'eggtooth/servicemanager/service/stopping'
 
-	def initialize
+	def initialize(logger = nil)
 		@services = {}
 		@event_listeners = {}
+		@log = logger || Logging.logger[self]
 	end
 
-	# Creates an instance of a service from the given configs, which then gets passed on to {{add()}}.	
+	# Creates an instance of a service from the given configs, which then gets passed on to {{add()}}.
+	# Aside from the standard attributes in {{add()}}, the following are also checked:
+	# 
+	# - {{:class}} (required): The fully qualified class name.
+	# - {{:gem}}: If class is part of a runtime gem, the gem name.
+	# 
+	# @todo track these objects for auto deactivate
+	# @todo require 
 	def activate(attribs)
 		cls = attribs[:class]
 		return if !cls || cls == ''
 		inst = nil
 		begin
+			require attribs[:gem] if attribs[:gem]
 			eval("inst = #{cls}.new")
 		rescue => ex
-			$stderr.write "activate: error: #{ex}\n"
+			@log.warn "activate: error: #{ex}\n#{ex.backtrace.join("\t\n")}"
 		end
 		return if !inst
-		
+
 		add(inst, attribs)
 	end
 	
@@ -174,7 +183,7 @@ class Eggtooth::ServiceManager
 	# @param Object payload
 	def generate_event(topic, payload)
 		if @event_listeners[topic]
-			$stderr.write "EVENT: #{topic} | #{payload[:service].inspect}\n"
+			@log.debug "EVENT: #{topic} | #{payload[:service].inspect}"
 			evt = Eggtooth::ServiceManager::Events::Event.new(topic, payload)
 			@event_listeners[topic].each do |listener|
 				listener.on_event(evt)

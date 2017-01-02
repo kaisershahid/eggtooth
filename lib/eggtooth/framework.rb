@@ -3,10 +3,12 @@ class Eggtooth::Framework
 	#/*@ Standard expression variables
 	E_PATH_INSTALL = "eggtooth.install"
 	E_PATH_HOME = "eggtooth.home"
+	E_PATH_REPOSITORY = "eggtooth.repository"
 	E_PATH_CONTENT = "eggtooth.content"
 	E_PATH_LIBS = "eggtooth.libs"
 	E_PATH_VARS = "eggtooth.var"
 	E_PATH_OUTPUT = "eggtooth.output"
+	E_PATH_LOG = "eggtooth.log"
 	#@*/
 	
 	# @param Hash Run-time options for initialization. {{root}} can can be specified, which takes precedence
@@ -14,6 +16,7 @@ class Eggtooth::Framework
 	def initialize(id, opts = {})
 		@id = id.clone.freeze
 		@opts = opts
+		@opts.symbolize_keys
 		@opts[:config] = {} if !opts[:config]
 		@opts[:config]['dir.config'] = 'config' if !@opts[:config]['dir.config']
 		@opts[:runmode] = 'local' if !@opts[:runmode]
@@ -22,7 +25,7 @@ class Eggtooth::Framework
 		root = ENV['EGGTOOTH_HOME'] if !root
 		root = Dir.pwd if !root || root == ''
 		@root = root[0] == '/' ? root : Eggtooth.resolve_path(root, Dir.pwd)
-		
+
 		@ee = Eggshell::Processor.new
 		@ee.vars[E_PATH_HOME] = root
 		@ee.vars[E_PATH_INSTALL] = Eggtooth::PATH_INSTALL
@@ -35,7 +38,7 @@ class Eggtooth::Framework
 		end
 
 		# normalize directories and set expression vars
-		['libs','content','var','output'].each do |pathkey|
+		['repository', 'libs','content','var','output', 'log'].each do |pathkey|
 			key = "dir.#{pathkey}"
 			path = @cfg_help[key]
 			if !path
@@ -47,10 +50,30 @@ class Eggtooth::Framework
 			@ee.vars["eggtooth.#{pathkey}"] = path
 		end
 		
-		@svc_man = Eggtooth::ServiceManager.new
+		# set base logger configs
+		# @todo read from config (maybe as service instances?)
+		@log = Logging.logger[@id]
+		@log.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/eggtooth.log"))
+		stdout = Logging.logger("#{@id}.stdout")
+		stdout.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stdout.log"))
+		$stdout.reopen("#{@ee.vars['eggtooth.log']}/stdout.log")
+		stderr = Logging.logger("#{@id}.stderr")
+		stderr.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stderr.log"))
+		$stderr.reopen("#{@ee.vars['eggtooth.log']}/stderr.log")
+		
+		@svc_man = Eggtooth::ServiceManager.new(logger('Eggooth::ServiceManager'))
 		@svc_man.add(self, {:sid => :framework})
 		
-		$stderr.write "<< framework: #{@id} => #{@root} >>\n"
+		stderr.info "<< framework: #{@id} => #{@root} >>"
+	end
+	
+	attr_reader :log
+
+	# Returns a framework-specific logger, with its root under the framework id. This allows
+	# multiple framework instances to keep separate logs.
+	def logger(key)
+		key = key.class if !key.is_a?(String) && !key.is_a?(Class)
+		Logging.logger["#{@id}::#{key.is_a?(Class) ? key.to_s : key}"]
 	end
 
 	private_class_method :new
@@ -78,7 +101,6 @@ class Eggtooth::Framework
 		@svc_man.add(@action_man, {:sid => 'action.manager'})
 		@svc_man.add(@script_act, {:sid => 'action.impl.script'})
 
-		# @todo initialize services
 		if @cfg_help['services'].is_a?(Array)
 			@cfg_help['services'].each do |attribs|
 				@svc_man.activate(attribs)

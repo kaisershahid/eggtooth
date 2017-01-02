@@ -26,6 +26,7 @@ class Eggtooth::ResourceManager
 	PATH_MERGE = '/merged'
 	
 	def initialize()
+		@log = Logging.logger[self]
 		@handlers = []
 		@root_paths = ['/ext', '/lib']
 		@overlay_prefix = PATH_MERGE
@@ -66,6 +67,7 @@ class Eggtooth::ResourceManager
 				break if res
 			end
 		else
+			@log.debug("resolving #{path} from roots")
 			@handlers.each do |handler|
 				if path.start_with?(handler.prefix)
 					res = handler.get_resource(path)
@@ -155,6 +157,7 @@ class Eggtooth::ResourceManager
 		@svc_man = svc_man
 		@svc_man.add_event_listener(self, Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED)
 		@fwk = @svc_man.get_by_sid(:framework)
+		@log = @fwk.logger(self)
 
 		@root_paths = Eggtooth::get_value(attribs['root.paths'], Array)
 
@@ -163,6 +166,7 @@ class Eggtooth::ResourceManager
 		mappings.each do |mapping|
 			prefix = mapping['prefix']
 			hroot = @fwk.expression_eval(mapping['path'])
+			@log.info("add mapping #{prefix} => #{hroot}")
 			handler = CoreFilesys::Handler.new(prefix, hroot, self)
 			add_handler(handler)
 		end

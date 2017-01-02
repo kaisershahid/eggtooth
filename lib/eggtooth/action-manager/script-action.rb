@@ -28,10 +28,10 @@ class Eggtooth::ActionManager::ScriptAction
 
 	EAM = Eggtooth::ActionManager
 
-	PATH_TYPE_ROOT = "/libs/sys/components/default"
+	PATH_TYPE_ROOT = "/lib/sys/components/default"
 	PROP_RESOURCE_TYPE = Eggtooth::ResourceManager::PROP_RESOURCE_TYPE
 	PROP_RESOURCE_SUPERTYPE = Eggtooth::ResourceManager::PROP_RESOURCE_SUPERTYPE
-
+	
 	def initialize(framework, opts)
 		# @todo get supported script extensions
 		# @todo get script handlers
@@ -41,6 +41,8 @@ class Eggtooth::ActionManager::ScriptAction
 		@svcman.add_event_listener(self, [Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED, Eggtooth::ServiceManager::TOPIC_SERVICE_STOPPING])
 		@exts = []
 		@compilers = {}
+		
+		@log = framework.logger(self)
 	end
 	
 	def on_event(event)
@@ -84,12 +86,12 @@ class Eggtooth::ActionManager::ScriptAction
 		path_info = request.path_info
 		method = path_info.method
 		resource = path_info.resource
-#		puts ">> exec: #{path_info} // #{path_info.resource.path}"
+		@log.debug ">> exec: #{path_info} // #{path_info.resource.path}"
 		component = component_resolve(resource)
-#		puts "\t>> component: #{component}\n"
+		@log.debug "\t>> component: #{component}"
 		if component
 			script = component.script_resource(path_info, ['rb', 'eggshell'])
-#			puts "\t>> script: #{script.inspect}\n"
+			@log.debug "\t>> script: #{script.inspect}"
 			if script
 				inst = compile(script)
 				if inst
@@ -118,13 +120,16 @@ class Eggtooth::ActionManager::ScriptAction
 		resourceType = resource.properties[PROP_RESOURCE_TYPE]
 		type = resource.type
 		compRes = nil
+
 		if resourceType
 			compRes = @resman.resolve(resourceType)
 		else
-			compRes = @resman.resolve("#{PATH_TYPE_ROOT}/#{type}")
+			compPath = "#{PATH_TYPE_ROOT}/#{type.gsub(':', '/')}"
+			compRes = @resman.resolve(compPath)
 		end
 
-#		puts ">> component_resolve: #{resource.path} type=#{resourceType} ==> #{compRes.inspect}"
+		@log.debug("component_resolve(#{resourceType}, #{type}) => #{compRes.class}")
+
 		if !compRes
 			# @throw exception
 		else
@@ -168,3 +173,4 @@ end
 
 require_relative './script-action/component.rb'
 require_relative './script-action/eggshell-compiler.rb'
+require_relative './script-action/ruby-compiler.rb'
