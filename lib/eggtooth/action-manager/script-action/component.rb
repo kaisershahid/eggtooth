@@ -43,6 +43,7 @@ class Eggtooth::ActionManager::ScriptAction::Component
 			parts = res.name.split('.')
 			name = parts.shift
 			ext = parts.pop
+#			puts ">> component: script_resource: checking #{path_info} against #{res.name}"
 
 			if Eggtooth::equal_mixed(ext, script_ext)
 				# check if there's a script matching the method given, since these take higher precedence
@@ -68,10 +69,11 @@ class Eggtooth::ActionManager::ScriptAction::Component
 					end
 				end
 
-				# last element matches request extension. take it out; if no previous extension
+				# last element matches request extension. if no previous extension
 				# found yet, set to this resource and continue
 				ext_match = false
 				if parts[-1] == path_info.extension
+#					puts "> found extension! #{parts[-1]}"
 					parts.pop
 					default_add = !last_match_ext
 					last_match_ext = true
@@ -81,7 +83,7 @@ class Eggtooth::ActionManager::ScriptAction::Component
 					end
 					ext_match = true
 				end
-				
+
 				if last_match_ext && !ext_match
 					next
 				end
@@ -97,7 +99,7 @@ class Eggtooth::ActionManager::ScriptAction::Component
 					end
 					parts.pop
 				end
-				
+
 				# if the length of matched selectors is longer than last matched length, use this.
 				# note that we're only going by number of selectors matched,
 				if parts.length > last_match_sel
@@ -109,8 +111,9 @@ class Eggtooth::ActionManager::ScriptAction::Component
 			end
 			false
 		end
-		
+
 		# @todo look at parent matches
+#		puts "	>> found: #{last_match_res ? last_match_res.path : nil}"
 		last_match_res
 	end
 	

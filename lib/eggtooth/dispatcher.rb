@@ -67,6 +67,7 @@ class Eggtooth::Dispatcher
 			exec_filters(Filter::SCOPE_PAGE, request, response)
 			am = @svc_man.get_by_sid('action.manager')
 			handler = am.map(request.path_info)
+			request.context[:recurse] = {}
 
 			if !handler
 				# @todo ??
@@ -84,9 +85,43 @@ class Eggtooth::Dispatcher
 		end
 	end
 
-	# 
-	def subrequest(path, request, response)
+	# Makes a call to another resource within the context of a full page
+	# request.
+	#
+	# @param Eggtooth::ResourceManager::PathInfo path_info The (modified) path info
+	# for the new resource.
+	# @todo put configurable recursion limit?
+	def subrequest(caller_request, caller_response, path_info, call_params = {})
+		path = path_info.to_s
+		request = caller_request.modify(path_info)
+		request.context[:recurse][path] = 0 if !request.context[:recurse][path]
+		request.context[:recurse][path] += 1
+		if request.context[:recurse][path] > 25
+			raise Exception.new("infinite recursion detected for subrequest #{path}")
+		end
+
+#		puts ">> subrequest: #{request.path_info.inspect}"
+		exec_filters(Filter::SCOPE_INCLUDE, request, caller_response)
+		am = @svc_man.get_by_sid('action.manager')
+		handler = am.map(path_info)
 		
+		# @todo make a new request/response pair?
+#		puts "\t>> handler: #{handler}"
+		if !handler
+			# @todo ??
+		else
+			request.context.push
+			request.context['call_params'] = call_params
+			begin
+#				puts "pre-exec: #{request.path_info}"
+				handler.exec(request, caller_response)
+			rescue => ex
+				# @todo throw
+			end
+			request.context.pop
+		end
+	
+		exec_filters(Filter::SCOPE_INCLUDE_END, request, caller_response)
 	end
 
 	# Filters allow the manipulation of requests and responses. Used for everything
@@ -100,6 +135,8 @@ class Eggtooth::Dispatcher
 		SCOPE_PAGE = "page"
 		# Filters to apply before a sub-request is made.
 		SCOPE_INCLUDE = "include"
+		# Filters to apply after a sub-request is made.
+		SCOPE_INCLUDE_END = "include.end"
 		# Filters to apply for response.
 		SCOPE_RESPONSE = "response"
 

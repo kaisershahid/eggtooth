@@ -12,7 +12,7 @@ module Eggtooth::Client::Http
 			res = Eggtooth::Client::Response.new
 			
 			@framework.dispatcher.dispatch(req, res)
-			res.write env.inspect
+			#res.write env.inspect
 			res
 		end
 	end

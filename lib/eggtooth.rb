@@ -52,6 +52,30 @@ module Eggtooth
 	end
 end
 
+class Hash
+	def symbolize_keys
+		queue = {}
+		each do |key, val|
+			if !key.is_a?(Symbol)
+				queue[key.to_sym] = self.delete(key)
+			end
+		end
+		queue.each do |key, val|
+			self[key] = val
+		end
+	end
+end
+
+class Array
+	def symbolize_vals
+		each_index do |i|
+			if !self[i].is_a?(Symbol)
+				self[i] = self[i].to_sym
+			end
+		end
+	end
+end
+
 require 'eggshell'
 require 'rack'
 require 'json'

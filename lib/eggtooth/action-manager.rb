@@ -15,6 +15,8 @@
 #
 # Note that if a request's selectors are `a.b.c`, both `a.b` and `b.c` are equivalent
 # matches.
+#
+# @todo support multiple same paths and use accept? ranking to find best
 class Eggtooth::ActionManager
 	include Eggtooth::ServiceManager::Events::EventListener
 

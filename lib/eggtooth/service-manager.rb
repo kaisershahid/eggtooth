@@ -38,6 +38,21 @@ class Eggtooth::ServiceManager
 		@services = {}
 		@event_listeners = {}
 	end
+
+	# Creates an instance of a service from the given configs, which then gets passed on to {{add()}}.	
+	def activate(attribs)
+		cls = attribs[:class]
+		return if !cls || cls == ''
+		inst = nil
+		begin
+			eval("inst = #{cls}.new")
+		rescue => ex
+			$stderr.write "activate: error: #{ex}\n"
+		end
+		return if !inst
+		
+		add(inst, attribs)
+	end
 	
 	def add(svc_inst, attribs = {})
 		atts = (attribs||{}).clone
@@ -159,6 +174,7 @@ class Eggtooth::ServiceManager
 	# @param Object payload
 	def generate_event(topic, payload)
 		if @event_listeners[topic]
+			$stderr.write "EVENT: #{topic} | #{payload[:service].inspect}\n"
 			evt = Eggtooth::ServiceManager::Events::Event.new(topic, payload)
 			@event_listeners[topic].each do |listener|
 				listener.on_event(evt)

@@ -25,6 +25,7 @@ module Eggtooth::Client
 		
 		def pop
 			@scope -= 1
+			@props[-1].clear
 			@props.pop
 		end
 		
@@ -39,7 +40,25 @@ module Eggtooth::Client
 			nil
 		end
 		
-		def set(key, val, scope)
+		def []=(key, val)
+			set(key, val)
+		end
+		
+		def each(&block)
+			checked = {}
+			idx = @props.length-1
+			while @props[idx]
+				@props[idx].each do |key, val|
+					next if !val || checked[key]
+					block.call(key, val)
+					checked[key] = true
+				end
+				idx -= 1
+			end
+		end
+		
+		def set(key, val, scope = nil)
+			scope = @scope if !scope
 			return if !scope.is_a?(Fixnum) || !@props[scope]
 			@props[scope][key] = val
 		end
@@ -55,9 +74,21 @@ module Eggtooth::Client
 		def path_info
 			@path_info
 		end
-
+		
+		attr_writer :path_info
+		protected :path_info=
+		
 		def context
 			@context
+		end
+		
+		# Generates and returns a duplicate request with new path info.
+		#
+		# @todo support injecting new params?
+		def modify(path_info)
+			new_req = self.dup
+			new_req.path_info = path_info
+			return new_req
 		end
 	end
 	

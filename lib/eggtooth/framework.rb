@@ -79,6 +79,11 @@ class Eggtooth::Framework
 		@svc_man.add(@script_act, {:sid => 'action.impl.script'})
 
 		# @todo initialize services
+		if @cfg_help['services'].is_a?(Array)
+			@cfg_help['services'].each do |attribs|
+				@svc_man.activate(attribs)
+			end
+		end
 	end
 	
 	def shutdown

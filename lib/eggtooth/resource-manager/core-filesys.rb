@@ -77,7 +77,7 @@ module Eggtooth::ResourceManager::CoreFilesys
 		
 		def cast(object)
 			if (object.is_a?(IO) || object == IO) && @type == ERM::TYPE_FILE
-				# @todo read-only?
+				File.new(@filepath, 'r')
 			end
 		end
 	end

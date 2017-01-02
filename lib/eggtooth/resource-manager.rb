@@ -32,8 +32,11 @@ class Eggtooth::ResourceManager
 		@handler_lib = nil
 	end
 
+	# @param String path
+	# @param String resource_type If not null and a resource is found, apply this
+	# resource type to it.
 	# @todo take out is_exec support
-	def resolve(path)
+	def resolve(path, resource_type = nil)
 		res = nil
 		
 		do_merge = false
@@ -70,10 +73,14 @@ class Eggtooth::ResourceManager
 				end
 			end
 		end
+		
+		if res && resource_type
+			res = ProxyResource.new(res, resource_type)
+		end
 
 		res
 	end
-
+	
 	# Decomposes a path into its constituent parts. See {{PathInfo}} for more details.
 	def path_info(path, method = nil)
 		parts = path[1..-1].split('/')
@@ -264,6 +271,72 @@ class Eggtooth::ResourceManager
 		def manager
 		end
 	end
+	
+	# Use this if you need a resource that isn't legit.
+	class NonExistingResource
+		include Resource
+
+		def initialize(path, manager = nil, props = {})
+			@path = path
+			@manager = manager
+			@props = props
+		end
+		
+		def path
+			@path
+		end
+		
+		def name
+			File.basename(@path)
+		end
+		
+		def type
+			TYPE_NULL
+		end
+		
+		def properties
+			@props
+		end
+		
+		def manager
+			@manager
+		end
+		
+		def parent
+		end
+	end
+	
+	# Use this to case one resource to another type.
+	def ProxyResource
+		def initialize(resource, newType)
+			@resource = resource
+			@newType = newType
+		end
+		
+		def path
+			@resource.path
+		end
+		
+		def name
+			@resource.name
+		end
+		
+		def properties
+			@resource.properties
+		end
+		
+		def type
+			@newType
+		end
+		
+		def parent
+			@resource.parent
+		end
+		
+		def manager
+			@resource.manager
+		end
+	end
 
 	# {{PathInfo}} parses out the parts of a request path. In Eggtooth, the URL can be broken up
 	# as follows (similar in terminology to [~ Sling's model ; https://sling.apache.org/documentation/the-sling-engine/url-decomposition.html ~]):
@@ -292,46 +365,99 @@ class Eggtooth::ResourceManager
 	class PathInfo
 		
 		def initialize(params)
-			@path = params[:path]
-			@extension = Eggtooth::get_value(params[:extension], '')
-			@selectors_raw = Eggtooth::get_value(params[:selectors], Array)
-			@selectors = @selectors_raw.join('.')
-			@suffix = Eggtooth::get_value(params[:suffix], '')
-			@method = Eggtooth::get_value(params[:method], '')
-			@resource = params[:resource]
+			@props = {}
+			@props[:path] = params[:path]
+			@props[:extension] = Eggtooth::get_value(params[:extension], '')
+			@props[:selectors_raw] = Eggtooth::get_value(params[:selectors], Array)
+			@props[:selectors] = @props[:selectors_raw].join('.')
+			@props[:suffix] = Eggtooth::get_value(params[:suffix], '')
+			@props[:method] = Eggtooth::get_value(params[:method], '')
+			@props[:resource] = params[:resource]
 		end
-
+		
+		attr_reader :props
+		protected :props
+	
 		def path
-			@path.clone
+			@props[:path].clone
 		end
 		
 		def selectors_raw
-			@selectors_raw.clone
+			@props[:selectors_raw].clone
 		end
 
 		def selectors
-			@selectors.clone
+			@props[:selectors].clone
 		end
 
 		def extension
-			@extension.clone
+			@props[:extension].clone
 		end
 
 		def suffix
-			@suffix.clone
+			@props[:suffix].clone
 		end
 
 		def method
-			@method.clone
+			@props[:method].clone
 		end
 		
 		def resource
-			@resource
+			@props[:resource]
 		end
 
-		# Apply changes to this instance's data and return a new instance.
-		# @todo fill in
+		def to_s
+			sel = @props[:selectors]
+			sel = ".#{sel}" if sel != ''
+			if @props[:extension] != ''
+				sel = "#{sel}.#{@props[:extension]}"
+			end
+			"#{props[:path]}#{sel}#{@props[:suffix]}"
+		end
+		
+		def inspect
+			@props.inspect
+		end
+
+		# Apply changes to this instance's data and return a new instance. Aside from
+		# all the keys supporter in the constructor, the following are also supported:
+		#
+		# - {{:delete}}: list of properties to set to empty.
+		# - {{:add_selectors}}: list of selectors to append to current selectors.
 		def modify(mods = {})
+			npath = PathInfo.new(self.props)
+			mods.symbolize_keys
+			mods.each do |key, val|
+				npath.props[key] = val
+			end
+			
+			if mods[:resource]
+				npath.props[:path] = mods[:resource].path
+			elsif mods[:path]
+				npath.props[:resource] = resource.manager.resolve(mods[:path])
+			end
+			
+			if mods[:delete].is_a?(Array)
+				mods[:delete].symbolize_vals
+				mods[:delete].each do |key|
+					if key == :selectors_raw || key == :selectors
+						npath.props[:selectors_raw] = []
+						npath.props[:selectors] = ''
+					elsif key == :resource
+						npath.props[key] = nil
+					else
+						npath.props[key] = ''
+					end
+				end
+			end
+
+			if mods[:add_selectors].is_a?(Array)
+				npath.props[:selectors_raw] += mods[:add_selectors]
+				npath.props[:selectors] = npath.props[:selectors_raw].join('.')
+			end
+			
+			# @todo :selectors_raw is joined
+			npath
 		end
 	end
 end
