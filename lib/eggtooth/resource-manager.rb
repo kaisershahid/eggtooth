@@ -1,3 +1,19 @@
+# Most interactions within the framework are mapped to a {{Resource}} context. A 
+# resource is any type of data object -- the default implementation uses a local 
+# file/directory hierarchy to map URLs and action handlers, but you could also
+# use any type of database (assuming a {{Handler}} exists for it). The {{ResourceManager}}
+# is responsible for locating and returning the requested resource, with optional
+# restrictions determined by {{Eggtooth::AccessManager}}.
+#
+# Resources are resolved through a path. If the path is absolute, an exact match
+# is attempted. If it's relative, a configurable set of roots are checked until
+# a matching resource is found.
+#
+# Handlers can be assigned to specific branches. This means that there can be a 
+# seamless mix of data from the local filesystem and external databases. Handlers
+# also have an optional {{Editor}} which allows modifications to a resource 
+# \[and controlled by {{Eggtooth::AccessManager}} constraints].
+# 
 # Handles look-up and retrieval of resources in the framework. Actual work is done
 # by specific handlers -- the manager handles the delegation, and might do specific
 # high-level filtering before any handlers are called.
@@ -167,7 +183,7 @@ class Eggtooth::ResourceManager
 			prefix = mapping['prefix']
 			hroot = @fwk.expression_eval(mapping['path'])
 			@log.info("add mapping #{prefix} => #{hroot}")
-			handler = CoreFilesys::Handler.new(prefix, hroot, self)
+			handler = CoreFilesys::FileHandler.new(prefix, hroot, self)
 			add_handler(handler)
 		end
 	end
@@ -207,264 +223,8 @@ class Eggtooth::ResourceManager
 			remove_handler(@svc_man.get_by_sid(event.payload[:sid]))
 		end
 	end
-
-	# Encapsulates a piece of data.
-	module Resource
-
-		# The full path to the resource.
-		def path
-		end
-
-		# The name portion of the path.
-		def name
-		end
-		
-		# High-level type of resource. This typically would refer to
-		# the handler for the object, or if unavailable, a more generic
-		# type like 'Folder' or 'File'.
-		#
-		# @return String the type of the resource.
-		def type
-		end
-		
-		# Meta attributes of the resource.
-		def properties
-		end
-
-		# Returns the direct children of this resource.
-		# @param Block block If given, it's passed the parameters {{resource}} and should evaluate to true or false.
-		# @return A list of (potentially filtered) children
-		def children(&block)
-		end
-		
-		# Returns a child resource with the given name.
-		# @return Resource `nil` if no child found.
-		def child(name)
-		end
-	
-		# Returns the parent resource.
-		def parent
-		end
-		
-		# Attempts to convert the given resource to some type. For instance, if
-		# the underlying resource is a static file, you could potentially get
-		# the stream by doing {{cast(IO)}}.
-		#
-		# @param Object object The type of object to cast resource to.
-		# @return `nil` if cast is unspported.
-		# @throw Exception if valid cast fails.
-		def cast(object)
-		end
-
-		# Returns the resource manager.
-		def manager
-		end
-	end
-	
-	# 
-	module Handler
-		# @return Resource `nil` if path is unhandled or resuroce not found.
-		def get_resource(path)
-		end
-		
-		# @return String The prefix handled by this instance.
-		def prefix
-		end
-
-		# Returns the resource manager.
-		def manager
-		end
-	end
-	
-	# Use this if you need a resource that isn't legit.
-	class NonExistingResource
-		include Resource
-
-		def initialize(path, manager = nil, props = {})
-			@path = path
-			@manager = manager
-			@props = props
-		end
-		
-		def path
-			@path
-		end
-		
-		def name
-			File.basename(@path)
-		end
-		
-		def type
-			TYPE_NULL
-		end
-		
-		def properties
-			@props
-		end
-		
-		def manager
-			@manager
-		end
-		
-		def parent
-		end
-	end
-	
-	# Use this to case one resource to another type.
-	def ProxyResource
-		def initialize(resource, newType)
-			@resource = resource
-			@newType = newType
-		end
-		
-		def path
-			@resource.path
-		end
-		
-		def name
-			@resource.name
-		end
-		
-		def properties
-			@resource.properties
-		end
-		
-		def type
-			@newType
-		end
-		
-		def parent
-			@resource.parent
-		end
-		
-		def manager
-			@resource.manager
-		end
-	end
-
-	# {{PathInfo}} parses out the parts of a request path. In Eggtooth, the URL can be broken up
-	# as follows (similar in terminology to [~ Sling's model ; https://sling.apache.org/documentation/the-sling-engine/url-decomposition.html ~]):
-	#
-	# pre.
-	# /path/to/resource
-	# /path/to/resource.extension
-	# /path/to/resource.selector*.extension
-	# /path/to/resource.selector*.extension/suffix
-	# 
-	# If we look at the resource name as being a set of words separated by a dot, we look for the 
-	# longest matching set of words from the URL to the resource itself. If there's one word left over,
-	# it's considered the [/extension/]. If there's two or more words left, the last word is the [/extension/],
-	# and the remaining words are the [/selectors/]. If there's a slash beyond the resource name, that is 
-	# considered the [/suffix/].
-	#
-	# These extra bits of the URL can potentially change the view of the resource you're requesting:
-	# for instance, if a resource can be rendered as either PDF or HTML, handlers can be written for 
-	# {{pdf}} and {{html}} extensions. If the resource is a search page, the selectors can contain
-	# offsets and limits (e.g. {{search.0.100.html}} or {{search.offset=0.limit=100.html}}). If the resource
-	# is a page editor, the suffix can be the path to an HTML file (e.g. {{/editor.html/path/to/actual/page.html}}).
-	#
-	# Note that [/extension/] in this sense has nothing to do with underlying resource. For instance,
-	# if there's a resource named {{document.doc}}, there is no extension, but {{document.doc.pdf}} would have
-	# an extension of {{pdf}}.
-	class PathInfo
-		
-		def initialize(params)
-			@props = {}
-			@props[:path] = params[:path]
-			@props[:extension] = Eggtooth::get_value(params[:extension], '')
-			@props[:selectors_raw] = Eggtooth::get_value(params[:selectors], Array)
-			@props[:selectors] = @props[:selectors_raw].join('.')
-			@props[:suffix] = Eggtooth::get_value(params[:suffix], '')
-			@props[:method] = Eggtooth::get_value(params[:method], '')
-			@props[:resource] = params[:resource]
-		end
-		
-		attr_reader :props
-		protected :props
-	
-		def path
-			@props[:path].clone
-		end
-		
-		def selectors_raw
-			@props[:selectors_raw].clone
-		end
-
-		def selectors
-			@props[:selectors].clone
-		end
-
-		def extension
-			@props[:extension].clone
-		end
-
-		def suffix
-			@props[:suffix].clone
-		end
-
-		def method
-			@props[:method].clone
-		end
-		
-		def resource
-			@props[:resource]
-		end
-
-		def to_s
-			sel = @props[:selectors]
-			sel = ".#{sel}" if sel != ''
-			if @props[:extension] != ''
-				sel = "#{sel}.#{@props[:extension]}"
-			end
-			"#{props[:path]}#{sel}#{@props[:suffix]}"
-		end
-		
-		def inspect
-			@props.inspect
-		end
-
-		# Apply changes to this instance's data and return a new instance. Aside from
-		# all the keys supporter in the constructor, the following are also supported:
-		#
-		# - {{:delete}}: list of properties to set to empty.
-		# - {{:add_selectors}}: list of selectors to append to current selectors.
-		def modify(mods = {})
-			npath = PathInfo.new(self.props)
-			mods.symbolize_keys
-			mods.each do |key, val|
-				npath.props[key] = val
-			end
-			
-			if mods[:resource]
-				npath.props[:path] = mods[:resource].path
-			elsif mods[:path]
-				npath.props[:resource] = resource.manager.resolve(mods[:path])
-			end
-			
-			if mods[:delete].is_a?(Array)
-				mods[:delete].symbolize_vals
-				mods[:delete].each do |key|
-					if key == :selectors_raw || key == :selectors
-						npath.props[:selectors_raw] = []
-						npath.props[:selectors] = ''
-					elsif key == :resource
-						npath.props[key] = nil
-					else
-						npath.props[key] = ''
-					end
-				end
-			end
-
-			if mods[:add_selectors].is_a?(Array)
-				npath.props[:selectors_raw] += mods[:add_selectors]
-				npath.props[:selectors] = npath.props[:selectors_raw].join('.')
-			end
-			
-			# @todo :selectors_raw is joined
-			npath
-		end
-	end
 end
 
+require_relative './resource-manager/core.rb'
 require_relative './resource-manager/merged-resource.rb'
 require_relative './resource-manager/core-filesys.rb'

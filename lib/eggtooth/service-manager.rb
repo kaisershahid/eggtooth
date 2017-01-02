@@ -45,9 +45,9 @@ class Eggtooth::ServiceManager
 	# 
 	# - {{:class}} (required): The fully qualified class name.
 	# - {{:gem}}: If class is part of a runtime gem, the gem name.
-	# 
+	#
 	# @todo track these objects for auto deactivate
-	# @todo require 
+	# @todo support `:class_path` attribute and expand any placeholders?
 	def activate(attribs)
 		cls = attribs[:class]
 		return if !cls || cls == ''
