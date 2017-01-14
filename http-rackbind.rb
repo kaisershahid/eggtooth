@@ -1,6 +1,8 @@
 require_relative './lib/eggtooth.rb'
 require_relative './lib/eggtooth/client/http.rb'
 
+Logging.logger['root'].add_appenders(Logging.appenders.stdout)
+
 opts = {}
 ARGV.each do |arg|
 	key, val = arg.split('=', 2)

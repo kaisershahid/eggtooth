@@ -37,10 +37,12 @@ class Eggtooth::ActionManager
 
 	def initialize()
 		@handlers = {METHOD_ALL => [], :exact => {}, :partial => {}}
+		@log = Logging.logger[self]
 	end
 
 	def svc_activate(svc_man, attribs = {})
 		@svc_man = svc_man
+		@log = @svc_man.get_by_sid(:framework).logger(self)
 		cls = Action.to_s
 		svc_man.find do |svc, sid, svc_attribs|
 			next if svc_attribs[:service]
@@ -58,7 +60,7 @@ class Eggtooth::ActionManager
 
 	def on_event(event)
 		return if !Eggtooth::equal_mixed(Action.to_s, event.payload[:service])
-		$stderr.write "event: #{event.inspect}\n"
+		@log.debug "event: #{event.inspect}"
 
 		action = @svc_man.get_by_sid(event.payload[:sid])
 		if event.topic == Eggtooth::ServiceManager::TOPIC_SERVICE_REGISTERED
@@ -69,6 +71,7 @@ class Eggtooth::ActionManager
 	end
 
 	def add_action(action)
+		@log.debug "add_action: #{action} | paths=#{action.paths} | methds=#{action.methods}"
 		if action.paths
 			action.paths.each do |path|
 				ptr = @handlers[:exact]
@@ -146,10 +149,13 @@ class Eggtooth::ActionManager
 		# priority 3: 
 		meth = path_info.method
 		meth = METHOD_ALL if !@handlers[meth]
-		last_action = nil
-		last_rank = 0
-
 		action = map_best(path_info, @handlers[meth])
+		#$stderr.write "map: #{path_info.method} -> #{meth} >> #{@handlers[meth]}"
+
+		# priority 4: no specific method matched
+		if !action && meth != METHOD_ALL
+			action = map_best(path_info, @handlers[METHOD_ALL])
+		end
 
 		action
 	end
@@ -159,6 +165,7 @@ class Eggtooth::ActionManager
 		last_rank = 0
 		candidates.each do |action|
 			rank = action.accept?(path_info)
+			@log.debug "map_best? #{rank} #{action}"
 			next if rank == 0
 			if rank >= last_rank
 				last_action = action
@@ -198,7 +205,7 @@ class Eggtooth::ActionManager
 		# - `extension`: 1 point
 		# - `suffix`: 1 point
 		# - `selectors`: 2 points for exact match; 1 point for partial match
-		def self.default_rank(path_info, types, selectors, extension, suffix)
+		def self.default_rank(path_info, types, selectors, extensions, suffixes)
 			types = types || []
 			selectors = selectors || []
 			extension = extension || ''
@@ -207,10 +214,10 @@ class Eggtooth::ActionManager
 			if (path_info.resource && Eggtooth.equal_mixed(path_info.resource.type, types)) || types.index('all')
 				points += 1
 			end
-			if Eggtooth.equal_mixed(path_info.extension, extension)
+			if Eggtooth.equal_mixed(path_info.extension, extensions)
 				points += 1
 			end
-			if Eggtooth.equal_mixed(path_info.suffix, suffix)
+			if Eggtooth.equal_mixed(path_info.suffix, suffixes)
 				points += 1
 			end
 
@@ -234,3 +241,6 @@ class Eggtooth::ActionManager
 		end
 	end
 end
+
+require_relative './action-manager/script-action.rb'
+require_relative './action-manager/servlet-action.rb'

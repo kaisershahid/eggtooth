@@ -3,6 +3,7 @@ require 'rack'
 require 'logging'
 require 'json'
 require 'yaml'
+require 'time'
 
 # A Sling-like framework for Ruby. The root module itself just contains helper methods.
 # All the good stuff is deeper in.
@@ -56,7 +57,35 @@ module Eggtooth
 			return haystack.find_index(needle) != nil
 		end
 	end
+
+	LOG_LEVELS = {
+		0 => 'DEBUG',
+		1 => 'INFO',
+		2 => 'WARN',
+		3 => 'ERROR',
+		4 => 'FATAL',
+		5 => 'OTHER'
+	}.freeze
+
+	# time, level, logger, data
+	LOG_FMT_1 = "%s | [%-5s] %s | %s\n"
+	
+	TIME_FMT = "%Y-%m-%d %H:%M:%S.%6N %z"
+	
+	class LayoutDefaultString < Logging::Layout
+		def initialize(opts = {})
+			super({:format_as => :string})
+			@opts = opts
+		end
+		
+		def format(event)
+			sprintf(LOG_FMT_1, event.time.strftime(TIME_FMT), LOG_LEVELS[event.level], event.logger, event.data)
+		end
+	end
 end
+
+Logging.appenders.stdout(:layout => Eggtooth::LayoutDefaultString.new)
+Logging.appenders.stderr(:layout => Eggtooth::LayoutDefaultString.new)
 
 class Hash
 	def symbolize_keys
@@ -90,7 +119,6 @@ require_relative './eggtooth/resource-manager.rb'
 require_relative './eggtooth/client.rb'
 require_relative './eggtooth/dispatcher.rb'
 require_relative './eggtooth/action-manager.rb'
-require_relative './eggtooth/action-manager/script-action.rb'
 
 #require_relative './eggtooth/eggshell-bundle.rb'
 #require_relative './eggtooth/filter-manager.rb'

@@ -83,12 +83,32 @@ class Eggtooth::ActionManager::ScriptAction::RubyCompiler
 		clsparts.join('__').gsub(/\./, '_')
 	end
 
+	# @todo copy functionality from eggshell compiled, and make eggshell compiled extend this?
 	class BaseCompiled
 		include Eggtooth::ActionManager::ScriptAction::CompiledScriptContainer
 
 		def init(context)
 			@context = context
 			@svcman = context['service_manager']
+		end
+		
+		def call(path, *args)
+			opts = args.shift
+			opts = {} if !opts
+			resType = opts['type']
+			resource = @context['path_info'].resource.manager.resolve(path, resType)
+
+			pathMods = opts['path_info'] || {}
+			pathMods.delete('path')
+			pathMods['resource'] = resource
+
+			path_info = @context['path_info'].modify(pathMods)
+			params = opts['params'] || {}
+
+			@svcman.get_by_sid('dispatcher').subrequest(@context['request'], @context['response'], path_info, params)
+		end
+		
+		def call_script(script_path)
 		end
 	end
 end

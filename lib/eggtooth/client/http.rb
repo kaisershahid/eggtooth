@@ -2,7 +2,7 @@ module Eggtooth::Client::Http
 	class RackBind
 		def initialize(framework)
 			@framework = framework
-			#@dispatcher = @framework.get_by_sid('dispatcher')
+			#@dispatcher = @framework.get_by_sid('dispatcher')			
 		end
 		
 		def call(env)

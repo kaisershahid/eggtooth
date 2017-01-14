@@ -104,7 +104,7 @@ class Eggtooth::Dispatcher
 			raise Exception.new("infinite recursion detected for subrequest #{path}")
 		end
 
-		log.debug ">> subrequest: #{request.path_info.inspect}"
+		@log.debug ">> subrequest: #{request.path_info.inspect}"
 		exec_filters(Filter::SCOPE_INCLUDE, request, caller_response)
 		am = @svc_man.get_by_sid('action.manager')
 		handler = am.map(path_info)

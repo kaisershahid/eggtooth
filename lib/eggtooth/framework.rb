@@ -53,13 +53,23 @@ class Eggtooth::Framework
 		# set base logger configs
 		# @todo read from config (maybe as service instances?)
 		@log = Logging.logger[@id]
-		@log.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/eggtooth.log"))
-		stdout = Logging.logger("#{@id}.stdout")
-		stdout.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stdout.log"))
-		$stdout.reopen("#{@ee.vars['eggtooth.log']}/stdout.log")
-		stderr = Logging.logger("#{@id}.stderr")
-		stderr.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stderr.log"))
-		$stderr.reopen("#{@ee.vars['eggtooth.log']}/stderr.log")
+		stdout = Logging.logger("#{@id}::stdout")
+		stderr = Logging.logger("#{@id}::stderr")
+
+		if !@opts[:log_std]
+			@log.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/eggtooth.log"))
+
+			stdout.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stdout.log"))
+			$stdout.reopen("#{@ee.vars['eggtooth.log']}/stdout.log")
+
+			stderr.add_appenders(Logging.appenders.file("#{@ee.vars['eggtooth.log']}/stderr.log"))
+			$stderr.reopen("#{@ee.vars['eggtooth.log']}/stderr.log")
+		else
+			@log.level = :info
+			@log.add_appenders(Logging.appenders.stdout)
+		end
+		
+		puts ">> appenders: #{@log.appenders.join("\n")}"
 		
 		@svc_man = Eggtooth::ServiceManager.new(logger('Eggooth::ServiceManager'))
 		@svc_man.add(self, {:sid => :framework})

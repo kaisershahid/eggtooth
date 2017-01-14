@@ -60,6 +60,9 @@ module Eggtooth
 			# @throw Exception if valid cast fails.
 			def cast(object)
 			end
+			
+			def editor
+			end
 
 			# Returns the resource manager.
 			def manager
@@ -80,7 +83,35 @@ module Eggtooth
 			def manager
 			end
 			
-			def editor
+			# Creates a new resource. Note that you can use {{NonExistingResource}}. This
+			# method can double as a copy operation when given an alternate path.
+			# 
+			# @param Resource resource The reference resource.
+			# @param String path If given, creates the resource at that location.
+			# @return Resource The newly created resource. This will never be the reference
+			# resource.
+			def add(resource, path = nil)
+			end
+
+			# Saves updates to the resource's properties.
+			# @param Resource resource The reference resource.
+			# @return Resource Handler can choose to return a new or the reference resource.
+			# Always assume new resource for broadest compatibility.
+			def modify(resource)
+			end
+
+			# Moves the given resource to a new parent, with the option to rename.
+			# @param Object resource If {{Resource}}, uses the path from that. Otherwise,
+			# a {{String}} is expected.
+			# @param Object parent The parent resource or path.
+			# @param String name If nil, uses the current resource's name.
+			# @return Resource The newly moved resource.
+			def move(resource, parent, name = nil)
+			end
+
+			# Removes a resource and its descendants.
+			# @return Boolean True if successful. False otherwise.
+			def delete(resource)
 			end
 		end
 
@@ -116,6 +147,9 @@ module Eggtooth
 			# Removes a resource and its descendants.
 			# @return Boolean True if successful. False otherwise.
 			def delete(resource)
+			end
+			
+			def reorder(parent, name, position_before = nil)
 			end
 		end
 		
@@ -197,6 +231,98 @@ module Eggtooth
 			
 			def manager
 				@resource.manager
+			end
+		end
+		
+		# A hash implementation that tracks updates to properties. This is useful for detecting
+		# and saving changes.
+		class AuditedHash
+			def initialize(map)
+				@map = map.is_a?(AuditedHash) ? map.map : map
+				@log = []
+			end
+
+			# Called before a new value is set. Allows implementation to validate any changes,
+			# throw exceptions on protected changes, etc.
+			# @return Array If operation is allowed, a key-value pair. Otherwise, nil.
+			def set_hook(key, val)
+				[key, val]
+			end
+			
+			def has_key?(key)
+				@map.has_key?(key)
+			end
+			
+			def [](key)
+				@map[key]
+			end
+
+			def []=(key, val)
+				hook = set_hook(key, val)
+				if !hook
+					return false
+				end
+
+				key, val = hook
+
+				existed = @map.has_key?(key) && !@locked
+				oval = @map[key]
+				@map[key] = val
+				
+				if existed
+					if val != oval
+						@log << [:modify, key, oval]
+					end
+				else
+					@log << [:add, key, val]
+				end
+			end
+			
+			def delete(key)
+				existed = @map.has_key?(key) && !@locked
+				val = @map[key]
+				@map.delete(key)
+				if existed
+					@log << [:delete, key, val]
+				end
+				val
+			end
+			
+			def each(&block)
+				@map.each do |k,v|
+					yield(k,v)
+				end
+			end
+			
+			def update(hash)
+				return if !hash.is_a?(Hash)
+				hash.each do |k,v|
+					self[k] = v
+				end
+			end
+
+			def map
+				@map.clone
+			end
+			
+			def changelog
+				@log.clone
+			end
+			
+			def clear
+				# @todo
+			end
+			
+			def dirty?
+				changelog.length
+			end
+			
+			def marshal_dump
+				@map
+			end
+			
+			def marshal_load(data)
+				@map = data
 			end
 		end
 

@@ -6,6 +6,7 @@
 # - macros
 # 	- {{et:header(key, val)}}
 # 	- {{et:call(path[, {type: newResourceType, path_info: {mods}, params: {}}]}}: 
+# 	- {{et:call_script(script_path)}}: calls another script within same component, going up component hierarchy to find the match
 # 	- {{et:include}}
 # 	- {{et:service}}
 # - remove macros:
