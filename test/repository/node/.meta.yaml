@@ -1,0 +1,5 @@
+---
+egg:type: hello
+egg:resourceType: sys/components/testComponent
+test: curl -Ftest=true http://localhost:8080/nodecurl -Ftest=true http://localhost:8080/node
+z: '2'

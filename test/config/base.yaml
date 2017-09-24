@@ -1,0 +1,36 @@
+# Config files are loaded in a two-step process:
+# 1. 'base.yaml'
+# 2. '$environment.yaml'
+#
+# Environment-specific values are merged with base.
+# 
+# The 'dir.*' variables are prefixed with the eggtooth instance's home unless they start with '/'
+dir.repository: 'repository'
+dir.content: 'repository/content' # default
+dir.libs: 'libs' # default
+dir.output: 'output' # default
+dir.var: 'var' # default
+dir.log: 'log' # defaults
+extensions: # List: scripts to execute (in order). $framework is exposed for scripts to interact with
+eggshell.params: # Map: default vars for processor
+resolver.manager: # default behaviors for ResolverManager
+  # for relative resource paths, uses the given paths for lookups. overrides go into /ext to avoid changing
+  # default code directly. order of precedence is left to right
+  root.paths: ['/ext', '/lib']
+  mappings: # if a resolution to a local mapping fails, check if it can be resolved from alternate sources
+    - {prefix: '/lib', path: '${eggtooth.install}/overlay'}
+    - {prefix: '/', path: '${eggtooth.repository}'}
+view.manager:
+  # for view/filter handlers, allowed paths for storing executable code
+  exec.paths: ['/lib', '/ext']
+services:
+  -
+    :class: Eggtooth::ActionManager::ScriptAction::EggshellCompiler
+    :root: '${eggtooth.home}/var'
+  -
+    :class: Eggtooth::ActionManager::ScriptAction::RubyCompiler
+    :root: '${eggtooth.home}/var'
+  -
+    :class: Eggtooth::ActionManager::ServletAction::Post
+    action.method:
+      - POST

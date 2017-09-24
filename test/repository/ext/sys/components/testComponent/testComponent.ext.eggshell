@@ -1,0 +1,3 @@
+Extension ext! ${path_info}
+
+ok

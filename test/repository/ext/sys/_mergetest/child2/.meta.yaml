@@ -1,0 +1,2 @@
+egg:type: sys:generic
+child2_prop1: test override

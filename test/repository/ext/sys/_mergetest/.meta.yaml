@@ -1,0 +1,6 @@
+egg:type: sys:generic
+egg:hideProps:
+  - prop1
+egg:hideChildren:
+  - child1
+prop2: goodbye override

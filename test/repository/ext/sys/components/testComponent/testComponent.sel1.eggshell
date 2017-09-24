@@ -1,0 +1,6 @@
+@et.header('content-type', 'text/plain')
+Hey hey hey... ${path_info}
+
+cooool
+
+@et.call('/node', {'path_info': {'extension': 'ext'}})
